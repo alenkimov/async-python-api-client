@@ -1,0 +1,4 @@
+interface:
+  display_name: "Async Python API Client"
+  short_description: "Build and update handwritten async API clients"
+  default_prompt: "Use $async-python-api-client to create or update a clean async Python client from this OpenAPI specification."
