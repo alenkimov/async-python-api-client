@@ -84,6 +84,8 @@ Allow dependency injection of an `AsyncClient` or `AsyncBaseTransport` when it m
 
 Use `better_proxy.Proxy` as the typed proxy representation. When accepting strings is helpful, normalize them once with `Proxy.from_str(...)`. Pass `proxy.as_url` to the `proxy=` parameter when constructing `httpx.AsyncClient`.
 
+When both a proxy and a caller-supplied `httpx.AsyncClient` are provided, reject the combination at construction with a clear configuration error. Proxy transport configuration belongs to the supplied client; do not silently ignore the proxy, mutate the supplied client, or replace its transport.
+
 Do not mutate proxy settings per request or rebuild the async client to rotate proxies. If proxy rotation is an explicit requirement, design a lifecycle-aware pool separately and test its concurrency behavior.
 
 Keep proxy credentials out of representations, exceptions, and logs. Account for the selected HTTPX extras when SOCKS support is required by the specification or user.
@@ -117,6 +119,8 @@ Read `components.securitySchemes` and effective `security` at both root and oper
 ## Responses and errors
 
 Return the type promised by the success response schema. For `204`, `205`, or a documented empty body, return `None`. Handle text or bytes directly when the media type is not JSON.
+
+Treat wildcard media types such as `*/*` as content negotiation, not as evidence of text or binary data. For a structured response schema, prefer JSON decoding and Pydantic validation when the runtime `Content-Type` is JSON (including a `+json` subtype) or the API contract indicates JSON; use text or bytes only when the runtime content type or contract indicates non-JSON data.
 
 Define a sensible base exception such as `APIError` with safe diagnostic fields:
 
