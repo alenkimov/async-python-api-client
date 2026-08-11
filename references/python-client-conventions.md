@@ -22,6 +22,7 @@ Use these conventions as defaults, not as a demand for framework-sized architect
 ## Design boundaries
 
 - Target Python 3.13+ and use native modern typing: `X | None`, built-in generics, `Self`, `Literal`, `TypedDict`, `Protocol`, and `StrEnum` where they improve the public contract.
+- Avoid `from __future__ import annotations` by default. Prefer clear declaration order and quoted forward references where needed so annotations work without postponed evaluation. Keep or add the future import only when it solves an unavoidable forward-reference or circular-typing problem, or when existing code relies on its annotation semantics; do not remove it mechanically during unrelated updates.
 - Expose async network operations only. Do not add a sync facade, call blocking HTTP libraries, or hide blocking work inside `async` methods.
 - Handwrite readable domain code. Never invoke OpenAPI Generator or a similar generator, commit generated SDK output, or create a `generated/` package.
 - Keep the OpenAPI document as the behavioral authority. Preserve vendor extensions only when they carry needed semantics.
@@ -225,6 +226,7 @@ Run focused tests during iteration, then the full suite. Run Ruff formatting and
 
 - Confirm that every requested operation matches the current OpenAPI document.
 - Confirm that all public network methods are async and fully typed.
+- Confirm that `from __future__ import annotations` is absent unless its use is justified.
 - Confirm that one shared `httpx.AsyncClient` is reused and closed according to ownership.
 - Confirm that Pydantic v2 APIs and Python 3.13+ typing are used.
 - Confirm that `better-proxy.Proxy`, authentication, errors, and pagination match the actual contract.
