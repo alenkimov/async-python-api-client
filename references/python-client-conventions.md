@@ -12,6 +12,7 @@ Use these conventions as defaults, not as a demand for framework-sized architect
 - [Operations and parameters](#operations-and-parameters)
 - [Authentication](#authentication)
 - [Responses and errors](#responses-and-errors)
+- [Public return types and response envelopes](#public-return-types-and-response-envelopes)
 - [Pagination](#pagination)
 - [Special request and response bodies](#special-request-and-response-bodies)
 - [Updating from a changed spec](#updating-from-a-changed-spec)
@@ -20,7 +21,7 @@ Use these conventions as defaults, not as a demand for framework-sized architect
 
 ## Design boundaries
 
-- Target Python 3.12+ and use native modern typing: `X | None`, built-in generics, `Self`, `Literal`, `TypedDict`, `Protocol`, and `StrEnum` where they improve the public contract.
+- Target Python 3.13+ and use native modern typing: `X | None`, built-in generics, `Self`, `Literal`, `TypedDict`, `Protocol`, and `StrEnum` where they improve the public contract.
 - Expose async network operations only. Do not add a sync facade, call blocking HTTP libraries, or hide blocking work inside `async` methods.
 - Handwrite readable domain code. Never invoke OpenAPI Generator or a similar generator, commit generated SDK output, or create a `generated/` package.
 - Keep the OpenAPI document as the behavioral authority. Preserve vendor extensions only when they carry needed semantics.
@@ -36,18 +37,27 @@ For a new modest client, start near this shape and remove files that do not earn
 pyproject.toml
 src/<package>/
 ├── __init__.py
+├── _envelopes.py
 ├── client.py
+├── enums.py
 ├── errors.py
-├── models.py
+├── models/
+│   ├── __init__.py
+│   ├── base.py
+│   └── <domain>.py
 └── py.typed
 tests/
 ├── test_client.py
 └── test_models.py
 ```
 
-Group models or endpoint methods into domain modules only after a single module becomes difficult to navigate. Export the intended public surface explicitly from `__init__.py`; do not expose transport helpers accidentally.
+Put OpenAPI enums in the package-level `enums.py` so the client and model modules can share them without creating model-package import cycles.
 
-Declare runtime dependencies such as `httpx`, `pydantic`, and `better-proxy` in project metadata. Respect the repository's package manager and version policy. For a new package, provide a Python 3.12+ constraint and conventional build metadata without adding unrelated tooling.
+Split `models/` primarily by API domain or resource, normally following stable OpenAPI tags or cohesive operation groups such as `nfts.py`, `events.py`, and `collections.py`. Keep a request or response model with the nested schemas chiefly owned by the same domain. Put only the base Pydantic model and mixins in `base.py`; use `common.py` only for genuinely cross-domain schemas with no clear owner. For a very small API, keep one domain module inside `models/` rather than inventing several tiny files.
+
+Do not split models mechanically into one file per schema, separate request and response trees, alphabetical buckets, or files based only on line count. If a domain module becomes unwieldy, split it by a stable subdomain or operation family. Keep dependency direction clear to avoid circular imports, and re-export the intended public models from `models/__init__.py` and the package `__init__.py`.
+
+Declare runtime dependencies such as `httpx`, `pydantic`, and `better-proxy` in project metadata. Respect the repository's package manager and version policy. For a new package, provide a Python 3.13+ constraint and conventional build metadata without adding unrelated tooling.
 
 ## Models and serialization
 
@@ -56,7 +66,7 @@ Declare runtime dependencies such as `httpx`, `pydantic`, and `better-proxy` in 
 - Distinguish a missing field from a nullable field. Do not translate every non-required property into an explicit `None` on outgoing requests.
 - Serialize request models with `mode="json"`, `by_alias=True`, and usually `exclude_unset=True`. Use `exclude_none=True` only when the API treats explicit null and omission identically.
 - Parse structured responses with `Model.model_validate(response.json())`. Use `TypeAdapter` for top-level arrays, unions, mappings, or scalar schemas.
-- Represent documented string enums with `StrEnum` when callers benefit from named values. Preserve unknown server values when forward compatibility is more important than a closed enum and the spec permits it.
+- Define documented enums in the package-level `enums.py`, using `StrEnum` for string values when callers benefit from named members. Preserve unknown server values when forward compatibility is more important than a closed enum and the spec permits it.
 - Map `date`, `date-time`, UUID, URI, decimal, and binary formats to useful Python types when the wire contract is clear.
 - Use field aliases for non-Python identifiers. Keep Python attribute names idiomatic while emitting exact wire names.
 - Model discriminated unions when the specification defines a discriminator. Avoid broad `Any`; confine it to genuinely free-form schemas.
@@ -118,7 +128,7 @@ Read `components.securitySchemes` and effective `security` at both root and oper
 
 ## Responses and errors
 
-Return the type promised by the success response schema. For `204`, `205`, or a documented empty body, return `None`. Handle text or bytes directly when the media type is not JSON.
+Validate successful responses against the documented schema, then expose the most ergonomic truthful public return type. Follow the response-envelope rules below. For `204`, `205`, or a documented empty body, return `None`. Handle text or bytes directly when the media type is not JSON.
 
 Treat wildcard media types such as `*/*` as content negotiation, not as evidence of text or binary data. For a structured response schema, prefer JSON decoding and Pydantic validation when the runtime `Content-Type` is JSON (including a `+json` subtype) or the API contract indicates JSON; use text or bytes only when the runtime content type or contract indicates non-JSON data.
 
@@ -134,6 +144,30 @@ Add subclasses such as authentication, permission, not-found, conflict, validati
 Translate `httpx.TimeoutException`, `NetworkError`, and related transport failures into a typed client transport error only when the package promises a stable exception surface; retain the original exception as `__cause__`. Never collapse cancellation into an API error.
 
 Parse documented non-2xx error schemas before falling back to safe JSON, text, or bytes summaries. Bound captured response bodies and redact credentials. Do not call `raise_for_status()` before extracting useful documented error details.
+
+## Public return types and response envelopes
+
+Distinguish domain models from transport-only response envelopes. Create Pydantic models for reusable domain entities and value objects. Do not create or expose a response model solely because an OpenAPI response wraps already typed values in a top-level JSON object.
+
+Treat a response object as a transport-only envelope when it:
+
+- is used only as the root response of an endpoint;
+- merely groups an already typed payload with a cursor or simple metadata;
+- has no independent domain meaning, validation rules, or reuse elsewhere.
+
+Validate the wire envelope internally, then unwrap it into an ergonomic public return type:
+
+- Return `T` or `list[T]` for an envelope containing one useful payload.
+- Return `tuple[list[T], str | None]` for a paginated payload and cursor.
+- Return `tuple[A, B]` for exactly two stable, independently meaningful values.
+
+Keep tuples limited to two values and make their order clear through the method annotation, documentation, and unpacking examples. Retain a named response model when the response has more than two meaningful fields, complex optional metadata, independent semantics, reuse across endpoints, or is likely to evolve in a way that would make a tuple ambiguous.
+
+Implement unwrapped transport envelopes as private `TypedDict` schemas validated by module-level `TypeAdapter` instances. Describe exact wire keys with `Required` and `NotRequired`, instantiate each adapter once, and use `validate_json()` to validate the complete response before unwrapping it. Convert missing keys, invalid shapes, and validation failures into the client's typed invalid-response error.
+
+Always place these private envelope schemas and adapters in the package-level `_envelopes.py`, even for a small client, so clients share a consistent structure. Keep the module private and do not re-export its schemas or adapters. Use a private `BaseModel` instead only when the envelope itself requires cross-field validation, normalization, or other model-specific behavior.
+
+When updating an existing client, apply envelope unwrapping only when explicitly requested because it changes public return types.
 
 ## Pagination
 
@@ -192,7 +226,7 @@ Run focused tests during iteration, then the full suite. Run Ruff formatting and
 - Confirm that every requested operation matches the current OpenAPI document.
 - Confirm that all public network methods are async and fully typed.
 - Confirm that one shared `httpx.AsyncClient` is reused and closed according to ownership.
-- Confirm that Pydantic v2 APIs and Python 3.12+ typing are used.
+- Confirm that Pydantic v2 APIs and Python 3.13+ typing are used.
 - Confirm that `better-proxy.Proxy`, authentication, errors, and pagination match the actual contract.
 - Confirm that no generator output, `generated/` layer, sync facade, or unnecessary abstraction was introduced.
 - Confirm that tests exercise wire behavior rather than only model construction.

@@ -1,6 +1,6 @@
 ---
 name: async-python-api-client
-description: Create and maintain clean, handwritten-style Python 3.12+ API clients from OpenAPI YAML or JSON specifications. Use when Codex must build a strictly async client from scratch, compare an existing client with a changed OpenAPI spec, add or revise endpoints and models with minimal churn, or improve typed authentication, pagination, errors, proxy support, and tests without using an OpenAPI code generator.
+description: Create and maintain clean, handwritten-style Python 3.13+ API clients from OpenAPI YAML or JSON specifications. Use when Codex must build a strictly async client from scratch, compare an existing client with a changed OpenAPI spec, add or revise endpoints and models with minimal churn, or improve typed authentication, pagination, errors, proxy support, and tests without using an OpenAPI code generator.
 ---
 
 # Async Python API Client

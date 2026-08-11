@@ -2,7 +2,7 @@
 
 A reusable Codex skill for creating and maintaining clean, handwritten-style Python API clients from OpenAPI YAML or JSON specifications.
 
-It guides Codex to build strictly async Python 3.12+ clients with a reused `httpx.AsyncClient`, Pydantic v2 models, `better-proxy.Proxy` support, typed authentication, pagination and API errors, explicit async lifecycle management, tests, and Ruff. It does not use OpenAPI code generators or create a generated-code layer.
+It guides Codex to build strictly async Python 3.13+ clients with a reused `httpx.AsyncClient`, Pydantic v2 models, `better-proxy.Proxy` support, typed authentication, pagination and API errors, explicit async lifecycle management, tests, and Ruff. It does not use OpenAPI code generators or create a generated-code layer.
 
 The skill supports two workflows:
 
